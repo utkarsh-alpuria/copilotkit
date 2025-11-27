@@ -1,3 +1,5 @@
+# 
+
 """Shared State feature."""
 
 from __future__ import annotations
@@ -25,6 +27,15 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from enum import Enum
 
+
+from google.adk.tools.mcp_tool.mcp_session_manager import SseConnectionParams,StreamableHTTPConnectionParams
+import litellm
+from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset
+from google.adk.models.lite_llm import LiteLlm
+import asyncio
+import os
+
+litellm.ssl_verify = False
 
 class ProverbsState(BaseModel):
     """List of the proverbs being written."""
@@ -147,46 +158,66 @@ def simple_after_model_modifier(
     return None
 
 
-proverbs_agent = LlmAgent(
-        name="ProverbsAgent",
-        model="gemini-2.5-flash",
+
+async def connect_mcp_tool(urls:List, header=None):
+        all_tools = []
+        for url in urls:
+            mcp_conn = StreamableHTTPConnectionParams(
+                        url=url,
+                    )
+            toolset = MCPToolset(connection_params=mcp_conn)
+            try:
+                tools = await toolset.get_tools()
+                for tool in tools:
+                    print("---- TOOL ----")
+                    print(f"Name: {tool.name}")
+                    print(f"Description: {tool.description}")
+                all_tools.extend(tools)
+            except Exception as e:
+                print(f"Error occurred while fetching tools from MCP at {url}: {e}")
+            finally:
+                if len(all_tools) > 0:
+                    await toolset.close()
+                print(f"Closed connection to MCP at: {url}")
+        return all_tools
+
+# git_mcp_tools = connect_mcp_tool(urls=["http://localhost:3001/mcp"])
+loop = asyncio.get_event_loop()
+git_mcp_tools = loop.run_until_complete(connect_mcp_tool(urls=["http://localhost:3001/mcp"]))
+print(git_mcp_tools)
+
+
+lite_llm_model = LiteLlm(
+        model=f"azure/{os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")}",
+        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+        api_base=os.getenv("AZURE_OPENAI_ENDPOINT"),
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+    )
+
+git_local_agent = LlmAgent(
+    name="GitHubAgent",
+    model=lite_llm_model,
+    tools=git_mcp_tools,
+    description="An agent for all git/github related tasks",
+    instruction="You are a GitHub operations assistant. Use MCP tools for all git/github related repository-level tasks."
+)
+
+orchestrator_agent = LlmAgent(
+        name="OrchesratorAgent",
+        model=lite_llm_model,
         instruction=f"""
-        When a user asks you to do anything regarding proverbs, you MUST use the set_proverbs tool.
-
-        IMPORTANT RULES ABOUT PROVERBS AND THE SET_PROVERBS TOOL:
-        1. Always use the set_proverbs tool for any proverbs-related requests
-        2. Always pass the COMPLETE LIST of proverbs to the set_proverbs tool. If the list had 5 proverbs and you removed one, you must pass the complete list of 4 remaining proverbs.
-        3. You can use existing proverbs if one is relevant to the user's request, but you can also create new proverbs as required.
-        4. Be creative and helpful in generating complete, practical proverbs
-        5. After using the tool, provide a brief summary of what you create, removed, or changed        7.
-
-        Examples of when to use the set_proverbs tool:
-        - "Add a proverb about soap" → Use tool with an array containing the existing list of proverbs with the new proverb about soap at the end.
-        - "Remove the first proverb" → Use tool with an array containing the all of the existing proverbs except the first one"
-        - "Change any proverbs about cats to mention that they have 18 lives" → If no proverbs mention cats, do not use the tool. If one or more proverbs do mention cats, change them to mention cats having 18 lives, and use the tool with an array of all of the proverbs, including ones that were changed and ones that did not require changes.
-
-        Do your best to ensure proverbs plausibly make sense.
-
-
-        IMPORTANT RULES ABOUT WEATHER AND THE GET_WEATHER TOOL:
-        1. Only call the get_weather tool if the user asks you for the weather in a given location.
-        2. If the user does not specify a location, you can use the location "Everywhere ever in the whole wide world"
-
-        Examples of when to use the get_weather tool:
-        - "What's the weather today in Tokyo?" → Use the tool with the location "Tokyo"
-        - "Whats the weather right now" → Use the location "Everywhere ever in the whole wide world"
-        - Is it raining in London? → Use the tool with the location "London"
+           You are an orchestrator agent with access to multiple agents and tools, call appropriate agent and tools according to user queries to complete the task.
         """,
-        tools=[set_proverbs, get_weather],
+        sub_agents = [git_local_agent],
         before_agent_callback=on_before_agent,
         before_model_callback=before_model_modifier,
         after_model_callback = simple_after_model_modifier
     )
 
 # Create ADK middleware agent instance
-adk_proverbs_agent = ADKAgent(
-    adk_agent=proverbs_agent,
-    app_name="proverbs_app",
+adk_orchestrator_agent = ADKAgent(
+    adk_agent=orchestrator_agent,
+    app_name="orchestrator_app",
     user_id="demo_user",
     session_timeout_seconds=3600,
     use_in_memory_services=True
@@ -196,7 +227,7 @@ adk_proverbs_agent = ADKAgent(
 app = FastAPI(title="ADK Middleware Proverbs Agent")
 
 # Add the ADK endpoint
-add_adk_fastapi_endpoint(app, adk_proverbs_agent, path="/")
+add_adk_fastapi_endpoint(app, adk_orchestrator_agent, path="/orchestrator")
 
 if __name__ == "__main__":
     import os
@@ -208,5 +239,5 @@ if __name__ == "__main__":
         print("   Get a key from: https://makersuite.google.com/app/apikey")
         print()
 
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", 9000))
     uvicorn.run(app, host="0.0.0.0", port=port)
