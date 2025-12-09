@@ -193,10 +193,15 @@ lite_llm_model = LiteLlm(
         api_base=os.getenv("AZURE_OPENAI_ENDPOINT"),
         api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
     )
+# lite_llm_model = LiteLlm(
+#         model=f"gemini/{os.getenv("GEMINI_MODEL_NAME")}",
+#         api_key=os.getenv("GEMINI_API_KEY"),
+#     )
+
 
 git_local_agent = LlmAgent(
     name="GitHubAgent",
-    model=lite_llm_model,
+    model="gemini-2.5-flash",
     tools=git_mcp_tools,
     description="An agent for all git/github related tasks",
     instruction="You are a GitHub operations assistant. Use MCP tools for all git/github related repository-level tasks."
@@ -208,7 +213,7 @@ orchestrator_agent = LlmAgent(
         instruction=f"""
            You are an orchestrator agent with access to multiple agents and tools, call appropriate agent and tools according to user queries to complete the task.
         """,
-        sub_agents = [git_local_agent],
+        # sub_agents = [git_local_agent],
         before_agent_callback=on_before_agent,
         before_model_callback=before_model_modifier,
         after_model_callback = simple_after_model_modifier
@@ -219,8 +224,8 @@ adk_orchestrator_agent = ADKAgent(
     adk_agent=orchestrator_agent,
     app_name="orchestrator_app",
     user_id="demo_user",
-    session_timeout_seconds=3600,
-    use_in_memory_services=True
+    # session_timeout_seconds=3600,
+    # use_in_memory_services=True
 )
 
 # Create FastAPI app
