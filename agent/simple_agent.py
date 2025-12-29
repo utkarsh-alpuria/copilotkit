@@ -46,16 +46,21 @@ logging.basicConfig(
 logging.debug("Logging initialized with file logging enabled.")
 
 
-# lite_llm_model = LiteLlm(
-#         model=f"azure/{os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")}",
-#         api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-#         api_base=os.getenv("AZURE_OPENAI_ENDPOINT"),
-#         api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
-#     )
 lite_llm_model = LiteLlm(
-        model=f"gemini/{os.getenv("GEMINI_MODEL_NAME")}",
-        api_key=os.getenv("GEMINI_API_KEY"),
+        model=f"azure/{os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")}",
+        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+        api_base=os.getenv("AZURE_OPENAI_ENDPOINT"),
+        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+        parallel_tool_calls=False
     )
+# lite_llm_model = LiteLlm(
+#         model=f"openai/{os.getenv("OPENAI_MODEL_NAME")}",
+#         api_key=os.getenv("OPENAI_API_KEY"),
+#     )
+# lite_llm_model = LiteLlm(
+#         model=f"gemini/{os.getenv("GEMINI_MODEL_NAME")}",
+#         api_key=os.getenv("GEMINI_API_KEY"),
+#     )
 
 agent = LlmAgent(
         name="OrchesratorAgent",
@@ -71,7 +76,6 @@ adk_agent = ADKAgent(
     # app_name="orchestrator_app",
     app_name="agents",
     user_id="demo_user",
-
 )
 
 # Create FastAPI app

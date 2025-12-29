@@ -5,3 +5,4 @@ pydantic
 google-adk
 google-genai
 ag-ui-adk
+google-adk[a2a]
